@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>✈️ Máy Bay Đố Kinh Thánh</title>
+<style>
+html,body{margin:0;overflow:hidden;background:#071428;color:#fff;font-family:Arial}
+canvas{display:block}
+#menu,#questionBox,#gameOver{
+position:absolute;inset:0;background:rgba(0,0,0,.85);
+display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+input,select,button{padding:10px;margin:6px;font-size:16px;border-radius:6px;border:none}
+button{background:#2ecc71;font-weight:bold}
+#hud{position:absolute;top:6px;left:6px;font-size:14px;line-height:1.4}
+.answer{background:#3498db;color:#fff;width:80%}
+#joystick{position:absolute;bottom:20px;left:20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08)}
+#stick{width:40px;height:40px;border-radius:50%;background:#00e5ff;position:absolute;left:40px;top:40px}
+#fireBtn{position:absolute;bottom:30px;right:30px;width:70px;height:70px;border-radius:50%;background:#ff5252;color:#fff}
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+<div id="hud"></div>
+
+<div id="menu">
+<h2>✝️ Máy Bay Kinh Thánh</h2>
+<input id="playerName" placeholder="Nhập tên">
+<select id="set">
+<option value="NT">📘 Tân Ước</option>
+<option value="OT">📕 Cựu Ước</option>
+<option value="BOTH">📘📕 Tân + Cựu (+25%)</option>
+</select>
+<button onclick="start()">BẮT ĐẦU</button>
+</div>
+
+<div id="questionBox" style="display:none">
+<h3 id="qText"></h3>
+<button class="answer" onclick="answer(0)"></button>
+<button class="answer" onclick="answer(1)"></button>
+<button class="answer" onclick="answer(2)"></button>
+</div>
+
+<div id="gameOver" style="display:none">
+<h2>💥 Máy bay bị phá huỷ</h2>
+<p id="finalScore"></p>
+<button onclick="location.reload()">Chơi lại</button>
+</div>
+
+<div id="joystick"><div id="stick"></div></div>
+<button id="fireBtn">🔥</button>
+
+<script>
+const c=document.getElementById("c"),ctx=c.getContext("2d");
+function resize(){c.width=innerWidth;c.height=innerHeight}
+resize();onresize=resize;
+
+/* INPUT */
+let keys={};
+onkeydown=e=>keys[e.key]=true;
+onkeyup=e=>keys[e.key]=false;
+
+let joy={x:0,y:0};
+joystick.ontouchmove=e=>{
+let r=joystick.getBoundingClientRect();
+let t=e.touches[0];
+let dx=t.clientX-(r.left+r.width/2);
+let dy=t.clientY-(r.top+r.height/2);
+let len=Math.hypot(dx,dy);
+if(len>40){dx*=40/len;dy*=40/len}
+stick.style.transform=`translate(${dx}px,${dy}px)`;
+joy.x=dx/40; joy.y=dy/40;
+}
+joystick.ontouchend=()=>{joy={x:0,y:0};stick.style.transform="translate(0,0)"}
+
+/* DATA */
+const NT = [
+ {q:"Chúa Giê-xu sinh tại đâu?",a:["Na-xa-rét","Bê-lem","Giê-ru-sa-lem"],c:1},
+ {q:"Mẹ của Chúa Giê-xu tên là gì?",a:["Ma-ri","Ê-li-sa-bét","An-na"],c:0},
+ {q:"Cha nuôi của Chúa Giê-xu tên là gì?",a:["Gia-cơ","Giô-sép","Phi-e-rơ"],c:1},
+ {q:"Ai báo tin Chúa Giê-xu giáng sinh cho Ma-ri?",a:["Thiên sứ","Thầy tế lễ","Vua"],c:0},
+ {q:"Chúa Giê-xu sinh ra trong thời vua nào?",a:["Sau-lơ","Đa-vít","Hê-rốt"],c:2},
+ {q:"Ai làm báp-tem cho Chúa Giê-xu?",a:["Phi-e-rơ","Giăng Báp-tít","Gia-cơ"],c:1},
+ {q:"Chúa Giê-xu bị cám dỗ trong hoang mạc bao lâu?",a:["10 ngày","30 ngày","40 ngày"],c:2},
+ {q:"Môn đồ đầu tiên được Chúa gọi là ai?",a:["Phi-e-rơ","Phao-lô","Ma-thi-a"],c:0},
+ {q:"Chúa Giê-xu hóa mấy bánh cho 5.000 người ăn?",a:["3 bánh","5 bánh","7 bánh"],c:1},
+ {q:"Chúa Giê-xu hóa mấy con cá?",a:["1","2","5"],c:1},
+ {q:"Chúa Giê-xu đi trên điều gì ở trên biển?",a:["Thuyền","Đá","Nước"],c:2},
+ {q:"Ai phản bội Chúa Giê-xu?",a:["Phi-e-rơ","Giu-đa","Giăng"],c:1},
+ {q:"Chúa Giê-xu bị bắt tại đâu?",a:["Đền thờ","Vườn Ghết-sê-ma-nê","Nhà Phi-e-rơ"],c:1},
+ {q:"Ai chối Chúa Giê-xu ba lần?",a:["Giăng","Phi-e-rơ","Gia-cơ"],c:1},
+ {q:"Chúa Giê-xu bị đóng đinh trên gì?",a:["Cột đá","Thập tự","Cây sống"],c:1},
+ {q:"Chúa Giê-xu chết vì tội lỗi của ai?",a:["Người Do Thái","La Mã","Nhân loại"],c:2},
+ {q:"Chúa Giê-xu sống lại sau mấy ngày?",a:["2","3","7"],c:1},
+ {q:"Ai là người đầu tiên thấy Chúa sống lại?",a:["Phi-e-rơ","Ma-ri Ma-đơ-len","Giăng"],c:1},
+ {q:"Chúa Giê-xu lên trời ở đâu?",a:["Bê-lem","Núi Ô-li-ve","Ga-li-lê"],c:1},
+ {q:"Chúa Giê-xu hứa ban điều gì cho người tin?",a:["Tiền bạc","Sự sống đời đời","Quyền lực"],c:1},
+ {q:"Chúa Giê-xu dạy phải yêu ai?",a:["Người tốt","Gia đình","Mọi người"],c:2},
+ {q:"Chúa Giê-xu dạy cầu nguyện gọi Đức Chúa Trời là gì?",a:["Vua","Cha","Quan án"],c:1},
+ {q:"Ai viết nhiều thư tín trong Tân Ước?",a:["Giăng","Phi-e-rơ","Phao-lô"],c:2},
+ {q:"Phao-lô từng bắt bớ Cơ Đốc nhân trước khi tin Chúa?",a:["Đúng","Sai","Không biết"],c:0},
+ {q:"Phao-lô gặp Chúa Giê-xu trên đường đi đâu?",a:["Rô-ma","Đa-mách","Ga-li-lê"],c:1},
+ {q:"Sách đầu tiên của Tân Ước là gì?",a:["Mác","Lu-ca","Ma-thi-ơ"],c:2},
+ {q:"Chúa Giê-xu là Con của ai?",a:["Con người","Con thiên sứ","Con Đức Chúa Trời"],c:2},
+ {q:"Chúa Giê-xu yêu trẻ em không?",a:["Không","Có","Chỉ bé trai"],c:1},
+ {q:"Chúa Giê-xu dạy tha thứ mấy lần?",a:["3 lần","7 lần","70 lần 7"],c:2},
+ {q:"Chúa Giê-xu chữa lành người mù được không?",a:["Không","Có","Ít khi"],c:1},
+ {q:"Ai là môn đồ Chúa yêu dấu?",a:["Phi-e-rơ","Giăng","Gia-cơ"],c:1},
+ {q:"Chúa Giê-xu sinh ra trong chuồng gì?",a:["Chuồng ngựa","Chuồng chiên","Chuồng bò"],c:2},
+ {q:"Ai đến thờ lạy Chúa Giê-xu lúc nhỏ?",a:["Mục đồng","Vua","Thầy tế lễ"],c:0},
+ {q:"Ai viết sách Khải Huyền?",a:["Phao-lô","Giăng","Phi-e-rơ"],c:1},
+ {q:"Chúa Giê-xu gọi Ngài là gì?",a:["Bánh sự sống","Nước","Lửa"],c:0},
+ {q:"Chúa Giê-xu có yêu người tội lỗi không?",a:["Không","Có","Chỉ một số"],c:1},
+ {q:"Chúa Giê-xu dạy phải sống thế nào?",a:["Ích kỷ","Yêu thương","Giàu có"],c:1},
+ {q:"Chúa Giê-xu ban Thánh Linh sau khi Ngài lên trời?",a:["Không","Có","Không rõ"],c:1}
+];
+const OT = [
+ {q:"Ai là người đầu tiên Đức Chúa Trời dựng nên?",a:["A-đam","Nô-ê","Áp-ra-ham"],c:0},
+ {q:"Vợ của A-đam tên là gì?",a:["Sa-ra","Ê-va","Ra-chên"],c:1},
+ {q:"Đức Chúa Trời dựng nên thế gian trong mấy ngày?",a:["5","6","7"],c:1},
+ {q:"Ngày thứ bảy Đức Chúa Trời làm gì?",a:["Tạo thêm","Nghỉ ngơi","Hủy diệt"],c:1},
+ {q:"Ai đóng con tàu lớn?",a:["Áp-ra-ham","Nô-ê","Môi-se"],c:1},
+ {q:"Có bao nhiêu người trong gia đình Nô-ê lên tàu?",a:["6","8","10"],c:1},
+ {q:"Áp-ra-ham được gọi là gì?",a:["Cha đức tin","Vua","Tiên tri"],c:0},
+ {q:"Con trai của Áp-ra-ham là ai?",a:["Gia-cốp","Ê-sác","Giô-sép"],c:1},
+ {q:"Gia-cốp còn có tên là gì?",a:["Môi-se","Ít-ra-ên","Đa-vít"],c:1},
+ {q:"Giô-sép bị bán sang nước nào?",a:["Ba-by-lôn","Ai Cập","Ca-na-an"],c:1},
+ {q:"Ai dẫn dân Y-sơ-ra-ên ra khỏi Ai Cập?",a:["A-rôn","Môi-se","Giô-suê"],c:1},
+ {q:"Đức Chúa Trời ban Mười Điều Răn cho ai?",a:["Áp-ra-ham","Môi-se","Sa-lô-môn"],c:1},
+ {q:"Biển nào được rẽ ra?",a:["Biển Chết","Biển Đỏ","Sông Giô-đanh"],c:1},
+ {q:"Ai kế vị Môi-se?",a:["Giô-suê","Ca-lép","A-rôn"],c:0},
+ {q:"Thành Giê-ri-cô sụp đổ nhờ gì?",a:["Gươm","Kèn","Lửa"],c:1},
+ {q:"Ai đánh bại Gô-li-át?",a:["Sau-lơ","Đa-vít","Sam-sôn"],c:1},
+ {q:"Đa-vít từng làm nghề gì?",a:["Vua","Chăn chiên","Thợ mộc"],c:1},
+ {q:"Sa-lô-môn nổi tiếng vì điều gì?",a:["Sức mạnh","Khôn ngoan","Chiến tranh"],c:1},
+ {q:"Sam-sôn có sức mạnh nhờ gì?",a:["Cơ bắp","Tóc","Áo giáp"],c:1},
+ {q:"Ai nuôi dưỡng Sam-sôn?",a:["Cha mẹ","Vua","Tiên tri"],c:0},
+ {q:"Giô-na bị gì nuốt?",a:["Cá lớn","Rồng","Cá mập"],c:0},
+ {q:"Giô-na được sai đến thành nào?",a:["Ni-ni-ve","Ba-by-lôn","Giê-ru-sa-lem"],c:0},
+ {q:"Đa-ni-ên bị ném vào đâu?",a:["Lửa","Hố sư tử","Biển"],c:1},
+ {q:"Ai là nữ hoàng cứu dân Do Thái?",a:["Ê-xơ-tê","Ru-tơ","Ma-ri"],c:0},
+ {q:"Ru-tơ là người nước nào?",a:["Do Thái","Mô-áp","Ai Cập"],c:1},
+ {q:"Thi Thiên do ai viết nhiều nhất?",a:["Sa-lô-môn","Đa-vít","Môi-se"],c:1},
+ {q:"Sách đầu tiên của Kinh Thánh là gì?",a:["Xuất Ê-díp-tô","Sáng Thế Ký","Lê-vi Ký"],c:1},
+ {q:"Đức Chúa Trời là Đấng như thế nào?",a:["Thay đổi","Yêu thương","Yếu đuối"],c:1},
+ {q:"Ê-li là ai?",a:["Vua","Thầy tế lễ","Quan án"],c:1},
+ {q:"Sa-mu-ên xức dầu cho ai làm vua?",a:["Sau-lơ","Đa-vít","Cả hai"],c:2},
+ {q:"Vua đầu tiên của Y-sơ-ra-ên là ai?",a:["Đa-vít","Sau-lơ","Sa-lô-môn"],c:1},
+ {q:"Ê-li-sê kế vị ai?",a:["Ê-li","Ê-li-sa","Ê-li-a"],c:2},
+ {q:"Ê-li-a được cất lên trời bằng gì?",a:["Ngựa lửa","Mây","Gió"],c:0},
+ {q:"Giô-suê dẫn dân vào đất nào?",a:["Ai Cập","Ca-na-an","Ba-by-lôn"],c:1},
+ {q:"Đức Chúa Trời dẫn dân Y-sơ-ra-ên ban ngày bằng gì?",a:["Mây","Lửa","Nước"],c:0},
+ {q:"Ban đêm Ngài dẫn dân bằng gì?",a:["Mây","Lửa","Sao"],c:1}
+];
+
+
+let qs=[],mult=1;
+let player,bullets=[],bombs=[],stars=[],ammos=[],missiles=[];
+let score=0,dodged=0,correct=0,ammo=0;
+let paused=false,game=true,currentQ=null;
+let lastAmmoTime=Date.now();
+
+/* START */
+function start(){
+qs=[];
+if(set.value!="OT")qs.push(...NT);
+if(set.value!="NT")qs.push(...OT);
+mult=set.value=="BOTH"?1.25:1;
+player={x:c.width/2,y:c.height-100};
+menu.style.display="none";
+loop();
+}
+
+/* SPAWN */
+function spawnBomb(){
+bombs.push({
+x:Math.random()*c.width,
+y:-30,
+r:12+score*0.03,
+v:2+score*0.01,
+passed:false,
+boom:0
+});
+}
+function spawnStar(){
+stars.push({x:Math.random()*c.width,y:-30,r:18,rot:0});
+}
+function spawnAmmo(){
+ammos.push({x:Math.random()*c.width,y:-30});
+}
+
+/* FIRE */
+fireBtn.onclick=fire;
+setInterval(()=>{if(game&&!paused)fire()},260);
+
+function fire(){
+/* đạn hình nón */
+let level=
+ammo>=20?5:
+ammo>=15?4:
+ammo>=10?3:
+ammo>=5?2:1;
+
+let spread=Math.PI/8;
+for(let i=0;i<level;i++){
+let t=level===1?0:(i/(level-1)-0.5);
+let ang=-Math.PI/2+t*spread;
+bullets.push({
+x:player.x,
+y:player.y-20,
+vx:Math.cos(ang)*7,
+vy:Math.sin(ang)*7
+});
+}
+
+/* 🚀 TÊN LỬA – MỐC 20 ĐẠN */
+if(ammo>=20){
+let count=Math.floor((ammo-20)/5)+1; // 20=1,25=2,30=3...
+for(let i=0;i<count;i++){
+missiles.push({
+x:player.x+(i-(count-1)/2)*12,
+y:player.y-30,
+vy:-5
+});
+}
+}
+}
+
+/* LOOP */
+function loop(){
+if(!game)return;
+requestAnimationFrame(loop);
+if(paused)return;
+ctx.clearRect(0,0,c.width,c.height);
+
+/* giảm cấp nếu 10s không nhặt đạn */
+if(Date.now()-lastAmmoTime>10000 && ammo>0){
+ammo--;
+lastAmmoTime=Date.now();
+}
+
+/* MOVE */
+let vx=(keys.ArrowRight?1:0)-(keys.ArrowLeft?1:0)+joy.x;
+let vy=(keys.ArrowDown?1:0)-(keys.ArrowUp?1:0)+joy.y;
+player.x+=vx*5; player.y+=vy*5;
+player.x=Math.max(20,Math.min(c.width-20,player.x));
+player.y=Math.max(20,Math.min(c.height-20,player.y));
+
+/* PLANE */
+ctx.fillStyle="#00e5ff";
+ctx.beginPath();
+ctx.moveTo(player.x,player.y-18);
+ctx.lineTo(player.x+14,player.y+18);
+ctx.lineTo(player.x-14,player.y+18);
+ctx.fill();
+
+/* BOM */
+if(Math.random()<0.018)spawnBomb();
+bombs.forEach(b=>{
+b.y+=b.v;
+if(b.boom>0){
+b.boom+=0.4;
+ctx.strokeStyle="rgba(255,80,80,.6)";
+ctx.beginPath();ctx.arc(b.x,b.y,b.boom,0,7);ctx.stroke();
+if(Math.hypot(b.x-player.x,b.y-player.y)<b.boom)end();
+}else{
+ctx.fillStyle="#a00";
+ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,7);ctx.fill();
+}
+if(!b.passed&&b.y>c.height){
+b.passed=true; score++; dodged++;
+if(Math.random()<0.35)spawnAmmo();
+if(dodged%10===0)spawnStar();
+}
+});
+
+/* AMMO */
+ammos.forEach(a=>{
+a.y+=3;
+ctx.fillStyle="#00ff99";
+ctx.fillRect(a.x-6,a.y-6,12,12);
+if(Math.hypot(a.x-player.x,a.y-player.y)<18){
+ammo++;
+lastAmmoTime=Date.now();
+a.y=9999;
+}
+});
+
+/* BULLET */
+bullets.forEach(b=>{
+b.x+=b.vx; b.y+=b.vy;
+ctx.fillStyle="#fff";
+ctx.fillRect(b.x-2,b.y-6,4,8);
+bombs.forEach(o=>{
+if(!o.boom&&Math.hypot(b.x-o.x,b.y-o.y)<o.r){
+o.boom=1; score+=3;
+}
+});
+stars.forEach(s=>{
+if(Math.hypot(b.x-s.x,b.y-s.y)<s.r){
+paused=true; stars=[]; showQ();
+}
+});
+});
+
+/* MISSILE */
+missiles.forEach(m=>{
+m.y+=m.vy;
+ctx.fillStyle="#ff4444";
+ctx.fillRect(m.x-3,m.y-12,6,12);
+/* khói */
+ctx.fillStyle="rgba(200,200,200,.4)";
+ctx.beginPath();
+ctx.arc(m.x,m.y+6,6,0,7);
+ctx.fill();
+bombs.forEach(o=>{
+if(!o.boom&&Math.hypot(m.x-o.x,m.y-o.y)<o.r+6){
+o.boom=1; score+=5; m.y=-999;
+}
+});
+});
+
+/* STAR */
+stars.forEach(s=>{
+s.y+=2; s.rot+=0.1;
+ctx.save();
+ctx.translate(s.x,s.y);
+ctx.rotate(s.rot);
+ctx.fillStyle="gold";
+ctx.beginPath();ctx.arc(0,0,s.r,0,7);ctx.fill();
+ctx.restore();
+});
+
+/* HUD */
+hud.innerHTML=
+`👤 ${playerName.value||"Người chơi"}<br>
+🎯 Điểm: ${Math.floor(score*mult)}<br>
+🔋 Đạn: ${ammo}<br>
+🚀 Tên lửa: ${ammo>=20?Math.floor((ammo-20)/5)+1:0}<br>
+⭐ Đúng: ${correct}`;
+}
+
+/* QUESTION */
+function showQ(){
+currentQ=qs[Math.random()*qs.length|0];
+qText.innerText=currentQ.q;
+document.querySelectorAll(".answer").forEach((b,i)=>b.innerText=currentQ.a[i]);
+questionBox.style.display="flex";
+}
+function answer(i){
+questionBox.style.display="none";
+paused=false;
+i===currentQ.c?(correct++,score+=5):(score=Math.max(0,score-5));
+}
+
+/* END */
+function end(){
+game=false;
+gameOver.style.display="flex";
+finalScore.innerText="Điểm: "+Math.floor(score*mult);
+}
+</script>
+</body>
+</html>
